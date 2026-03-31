@@ -1503,17 +1503,44 @@
 
       .wx-verify-badge--admin,
       .wx-verify-icon-badge--admin {
-        --wx-verify-bg: conic-gradient(from 0deg, #fef08a, #facc15, #f97316, #ef4444, #facc15, #fef08a);
-        --wx-verify-glow: rgba(254,240,138,0.95);
+        --wx-verify-bg: conic-gradient(
+          from 0deg,
+          #fff7b3 0deg,
+          #facc15 70deg,
+          #f97316 130deg,
+          #ef4444 200deg,
+          #d946ef 280deg,
+          #22d3ee 330deg,
+          #fff7b3 360deg
+        );
+        --wx-verify-glow: rgba(251,191,36,0.98);
+        box-shadow:
+          0 0 0 1px rgba(255,255,255,0.45),
+          0 0 12px rgba(251,191,36,0.95),
+          0 0 24px rgba(249,115,22,0.52),
+          0 0 42px rgba(217,70,239,0.34);
       }
 
       .wx-verify-badge--admin {
-        animation: wx-admin-pulse 2.4s ease-in-out infinite;
+        animation:
+          wx-admin-pulse 1.75s ease-in-out infinite,
+          wx-admin-spin 5.4s linear infinite;
+      }
+
+      .wx-verify-icon-badge--admin {
+        animation:
+          wx-admin-pulse 2s ease-in-out infinite,
+          wx-admin-spin 6.8s linear infinite;
       }
 
       @keyframes wx-admin-pulse {
         0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.06); }
+        50% { transform: scale(1.1); }
+      }
+
+      @keyframes wx-admin-spin {
+        0% { filter: hue-rotate(0deg) saturate(1); }
+        100% { filter: hue-rotate(360deg) saturate(1.28); }
       }
 
       .wx-verify-plans {
@@ -3324,6 +3351,30 @@
         font-size: 0.82rem;
         padding: 0.3rem 0.5rem;
       }
+      .wx-poll-custom-row,
+      .wx-poll-exact-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .wx-poll-custom-row input[type="number"] {
+        width: 110px;
+      }
+      .wx-poll-custom-row input,
+      .wx-poll-custom-row select,
+      .wx-poll-exact-row input {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid var(--stroke);
+        border-radius: 8px;
+        color: var(--text);
+        font-size: 0.82rem;
+        padding: 0.38rem 0.55rem;
+      }
+      .wx-poll-custom-hint {
+        margin: 0;
+        color: var(--text-faint);
+        font-size: 0.74rem;
+      }
 
       /* ── Poll in feed ── */
       .wx-post-poll {
@@ -4466,14 +4517,31 @@
               <div id="wx-poll-options-list" class="wx-poll-options-list"></div>
               <button type="button" class="wx-btn wx-btn--outline wx-btn--tiny" id="wx-poll-add-option">+ Opción</button>
               <div class="wx-poll-duration">
-                <label for="wx-poll-duration-select">Duración</label>
+                <label for="wx-poll-duration-select">Duraci?n</label>
                 <select id="wx-poll-duration-select" class="wx-poll-select">
-                  <option value="">Sin límite</option>
-                  <option value="1">1 día</option>
-                  <option value="3">3 días</option>
-                  <option value="7">7 días</option>
+                  <option value="">Sin l?mite</option>
+                  <option value="1h">1 hora</option>
+                  <option value="6h">6 horas</option>
+                  <option value="12h">12 horas</option>
+                  <option value="1d">1 d?a</option>
+                  <option value="3d">3 d?as</option>
+                  <option value="7d">7 d?as</option>
+                  <option value="custom_duration">Personalizar (min/horas/d?as)</option>
+                  <option value="exact_datetime">Fecha y hora exacta</option>
                 </select>
               </div>
+              <div class="wx-poll-custom-row" id="wx-poll-custom-row" hidden>
+                <input type="number" id="wx-poll-custom-value" min="1" max="43200" step="1" placeholder="Cantidad" />
+                <select id="wx-poll-custom-unit">
+                  <option value="minutes">Minutos</option>
+                  <option value="hours" selected>Horas</option>
+                  <option value="days">D?as</option>
+                </select>
+              </div>
+              <div class="wx-poll-exact-row" id="wx-poll-exact-row" hidden>
+                <input type="datetime-local" id="wx-poll-exact-datetime" />
+              </div>
+              <p class="wx-poll-custom-hint" id="wx-poll-custom-hint"></p>
               <p id="wx-poll-status" class="wx-media-status"></p>
             </div>
           </div>
@@ -6500,6 +6568,26 @@ function getMaxChars() {
         if ($addOpt) $addOpt.disabled = pollState.options.length >= 6;
       }
 
+      function formatPollEndLabel(isoDate) {
+        if (!isoDate) return 'Sin límite';
+        const d = new Date(isoDate);
+        if (Number.isNaN(d.getTime())) return 'Sin límite';
+        return 'Finaliza: ' + d.toLocaleString();
+      }
+
+      function parsePollPresetToDate(presetValue) {
+        if (!presetValue || presetValue === 'custom_duration' || presetValue === 'exact_datetime') return null;
+        const m = String(presetValue).match(/^(\d+)([mhd])$/i);
+        if (!m) return null;
+        const amount = Math.max(1, parseInt(m[1], 10));
+        const unit = m[2].toLowerCase();
+        const d = new Date();
+        if (unit === 'm') d.setMinutes(d.getMinutes() + amount);
+        if (unit === 'h') d.setHours(d.getHours() + amount);
+        if (unit === 'd') d.setDate(d.getDate() + amount);
+        return d;
+      }
+
       function initPollBuilder() {
         if (!pollState) {
           pollState = { question: '', options: ['', ''], ends_at: null };
@@ -6507,22 +6595,98 @@ function getMaxChars() {
         const $q = document.getElementById('wx-poll-question');
         if ($q) { $q.value = pollState.question; $q.oninput = () => { pollState.question = $q.value; }; }
         const $dur = document.getElementById('wx-poll-duration-select');
+        const $customRow = document.getElementById('wx-poll-custom-row');
+        const $customValue = document.getElementById('wx-poll-custom-value');
+        const $customUnit = document.getElementById('wx-poll-custom-unit');
+        const $exactRow = document.getElementById('wx-poll-exact-row');
+        const $exactDate = document.getElementById('wx-poll-exact-datetime');
+        const $hint = document.getElementById('wx-poll-custom-hint');
+        const $ps = document.getElementById('wx-poll-status');
+
+        const setPollEndsAt = (d) => {
+          if (d && !Number.isNaN(d.getTime()) && d.getTime() > Date.now()) {
+            pollState.ends_at = d.toISOString();
+            if ($ps) $ps.textContent = formatPollEndLabel(pollState.ends_at);
+            if ($hint) $hint.textContent = '';
+            return;
+          }
+          pollState.ends_at = null;
+          if ($ps) $ps.textContent = 'Sin límite';
+        };
+
+        const applyCustomDuration = () => {
+          const amount = Math.max(1, parseInt(($customValue && $customValue.value) || '0', 10));
+          const unit = ($customUnit && $customUnit.value) || 'hours';
+          if ($customValue && (!$customValue.value || Number.isNaN(amount))) {
+            if ($ps) $ps.textContent = 'Ingresa una cantidad válida.';
+            return;
+          }
+          const d = new Date();
+          if (unit === 'minutes') d.setMinutes(d.getMinutes() + amount);
+          if (unit === 'hours') d.setHours(d.getHours() + amount);
+          if (unit === 'days') d.setDate(d.getDate() + amount);
+          setPollEndsAt(d);
+        };
+
+        const applyExactDate = () => {
+          const raw = ($exactDate && $exactDate.value) || '';
+          if (!raw) {
+            pollState.ends_at = null;
+            if ($ps) $ps.textContent = 'Selecciona una fecha y hora exacta.';
+            return;
+          }
+          const d = new Date(raw);
+          if (Number.isNaN(d.getTime()) || d.getTime() <= Date.now()) {
+            if ($ps) $ps.textContent = 'La fecha debe estar en el futuro.';
+            pollState.ends_at = null;
+            return;
+          }
+          setPollEndsAt(d);
+        };
+
+        const syncMode = () => {
+          const mode = ($dur && $dur.value) || '';
+          if ($customRow) $customRow.hidden = mode !== 'custom_duration';
+          if ($exactRow) $exactRow.hidden = mode !== 'exact_datetime';
+          if (mode === '') {
+            pollState.ends_at = null;
+            if ($hint) $hint.textContent = '';
+            if ($ps) $ps.textContent = 'Sin límite';
+            return;
+          }
+          if (mode === 'custom_duration') {
+            if ($hint) $hint.textContent = 'Define una duración exacta en minutos, horas o días.';
+            applyCustomDuration();
+            return;
+          }
+          if (mode === 'exact_datetime') {
+            if ($hint) $hint.textContent = 'Usa fecha y hora local para cierre exacto.';
+            applyExactDate();
+            return;
+          }
+          if ($hint) $hint.textContent = '';
+          const presetDate = parsePollPresetToDate(mode);
+          setPollEndsAt(presetDate);
+        };
+
         if ($dur) {
           $dur.value = '';
-          $dur.onchange = () => {
-            const days = parseInt($dur.value, 10);
-            if (!isNaN(days) && days > 0) {
-              const d = new Date();
-              d.setDate(d.getDate() + days);
-              pollState.ends_at = d.toISOString();
-            } else {
-              pollState.ends_at = null;
-            }
-          };
+          $dur.onchange = syncMode;
         }
+        if ($customValue) $customValue.oninput = () => { if ($dur && $dur.value === 'custom_duration') syncMode(); };
+        if ($customUnit) $customUnit.onchange = () => { if ($dur && $dur.value === 'custom_duration') syncMode(); };
+        if ($exactDate) $exactDate.onchange = () => { if ($dur && $dur.value === 'exact_datetime') syncMode(); };
+
+        if (pollState.ends_at) {
+          const d = new Date(pollState.ends_at);
+          if (!Number.isNaN(d.getTime()) && d.getTime() > Date.now() && $exactDate && $dur) {
+            $dur.value = 'exact_datetime';
+            const pad = (n) => String(n).padStart(2, '0');
+            $exactDate.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+          }
+        }
+        syncMode();
         renderPollOptionRows();
-        const $ps = document.getElementById('wx-poll-status');
-        if ($ps) $ps.textContent = '';
       }
 
       function clearPollState() {
@@ -6531,10 +6695,22 @@ function getMaxChars() {
         const $list = document.getElementById('wx-poll-options-list');
         const $ps = document.getElementById('wx-poll-status');
         const $dur = document.getElementById('wx-poll-duration-select');
+        const $customRow = document.getElementById('wx-poll-custom-row');
+        const $customValue = document.getElementById('wx-poll-custom-value');
+        const $customUnit = document.getElementById('wx-poll-custom-unit');
+        const $exactRow = document.getElementById('wx-poll-exact-row');
+        const $exactDate = document.getElementById('wx-poll-exact-datetime');
+        const $hint = document.getElementById('wx-poll-custom-hint');
         if ($q) $q.value = '';
         if ($list) $list.innerHTML = '';
-        if ($ps) $ps.textContent = '';
+        if ($ps) $ps.textContent = 'Sin límite';
         if ($dur) $dur.value = '';
+        if ($customRow) $customRow.hidden = true;
+        if ($customValue) $customValue.value = '';
+        if ($customUnit) $customUnit.value = 'hours';
+        if ($exactRow) $exactRow.hidden = true;
+        if ($exactDate) $exactDate.value = '';
+        if ($hint) $hint.textContent = '';
       }
 
       function getPollPayload() {
@@ -6542,6 +6718,14 @@ function getMaxChars() {
         const question = (pollState.question || '').trim();
         const options = pollState.options.map(o => o.trim()).filter(Boolean);
         if (!question || options.length < 2) return null;
+        if (pollState.ends_at) {
+          const end = new Date(pollState.ends_at);
+          if (Number.isNaN(end.getTime()) || end.getTime() <= Date.now()) {
+            const $ps = document.getElementById('wx-poll-status');
+            if ($ps) $ps.textContent = 'Configura un cierre válido para la encuesta.';
+            return null;
+          }
+        }
         return { question, options, ends_at: pollState.ends_at || undefined };
       }
 
