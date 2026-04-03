@@ -3376,50 +3376,93 @@
         font-size: 0.74rem;
       }
 
-      /* ── Poll in feed ── */
+      /* Poll in feed */
       .wx-post-poll {
         margin: 0.6rem 0 0.2rem;
-        background: rgba(34,211,238,0.05);
-        border: 1px solid rgba(34,211,238,0.18);
-        border-radius: 14px;
-        padding: 0.85rem 1rem;
+        background: linear-gradient(180deg, rgba(6,16,34,0.88), rgba(4,12,24,0.95));
+        border: 1px solid rgba(34,211,238,0.2);
+        border-radius: 16px;
+        padding: 0.95rem 1rem;
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.62rem;
+        box-shadow: 0 12px 28px rgba(2,12,27,0.5);
+      }
+      .wx-poll-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.6rem;
+      }
+      .wx-poll-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border-radius: 999px;
+        padding: 0.24rem 0.56rem;
+        font-size: 0.7rem;
+        color: #b8f6ff;
+        border: 1px solid rgba(34,211,238,0.35);
+        background: rgba(34,211,238,0.12);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-weight: 700;
+      }
+      .wx-poll-state {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 0.2rem 0.55rem;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .wx-poll-state--open {
+        color: #8bf6c2;
+        border: 1px solid rgba(16,185,129,0.34);
+        background: rgba(16,185,129,0.14);
+      }
+      .wx-poll-state--closed {
+        color: #fecaca;
+        border: 1px solid rgba(239,68,68,0.4);
+        background: rgba(239,68,68,0.16);
       }
       .wx-poll-question {
         font-weight: 600;
-        font-size: 0.9rem;
+        font-size: 0.92rem;
         color: var(--text);
-        margin-bottom: 0.25rem;
+        margin-bottom: 0.15rem;
+        line-height: 1.45;
       }
       .wx-poll-option-btn {
         width: 100%;
         text-align: left;
-        background: rgba(255,255,255,0.04);
-        border: 1.5px solid var(--stroke);
+        background: rgba(255,255,255,0.035);
+        border: 1px solid rgba(148,163,184,0.26);
         border-radius: 8px;
         color: var(--text);
         font-family: var(--font-body);
         font-size: 0.85rem;
-        padding: 0.5rem 0.75rem;
+        padding: 0.56rem 0.76rem;
         cursor: pointer;
         position: relative;
         overflow: hidden;
-        transition: border-color 0.18s, background 0.18s;
+        transition: border-color 0.18s, background 0.18s, transform 0.14s;
       }
       .wx-poll-option-btn:hover:not(:disabled) {
-        border-color: var(--accent);
-        background: var(--accent-soft);
+        transform: translateY(-1px);
+        border-color: rgba(34,211,238,0.5);
+        background: rgba(34,211,238,0.13);
       }
       .wx-poll-option-btn.is-voted {
-        border-color: var(--accent);
-        background: rgba(34,211,238,0.12);
+        border-color: rgba(34,211,238,0.65);
+        background: rgba(34,211,238,0.16);
       }
       .wx-poll-option-bar {
         position: absolute;
         left: 0; top: 0; bottom: 0;
-        background: rgba(34,211,238,0.15);
+        background: linear-gradient(90deg, rgba(34,211,238,0.22), rgba(125,211,252,0.2));
         border-radius: 8px 0 0 8px;
         transition: width 0.45s ease;
         pointer-events: none;
@@ -3436,14 +3479,17 @@
         font-size: 0.75rem;
         color: var(--accent);
         font-weight: 600;
-        flex-shrink: 0;
       }
       .wx-poll-meta {
-        font-size: 0.72rem;
-        color: var(--text-faint);
+        margin-top: 0.05rem;
         display: flex;
-        gap: 0.75rem;
-        margin-top: 0.1rem;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--text-faint);
+        font-size: 0.76rem;
+        border-top: 1px solid rgba(148,163,184,0.16);
+        padding-top: 0.48rem;
       }
       .wx-poll-ended { color: var(--danger); }
 
@@ -5567,6 +5613,7 @@
             // hide $userCard again). setTab handles all DOM visibility correctly.
             setTab('profile');
             applyProfileView(user, { readonly: false });
+            ensureOwnProfileVisibility();
             fetchMyPosts();
             fetchScheduledPosts();
             fetchCollabRequests().catch(() => {});
@@ -6774,15 +6821,28 @@ function getMaxChars() {
         const wrap = document.createElement('div');
         wrap.className = 'wx-post-poll';
 
-        const q = document.createElement('div');
-        q.className = 'wx-poll-question';
-        q.textContent = poll.question;
-        wrap.appendChild(q);
-
         const hasVoted = poll.my_vote != null;
         const isEnded = poll.ends_at && new Date(poll.ends_at) < new Date();
         const showResults = hasVoted || isEnded || !currentUser;
         const total = poll.total_votes || 0;
+
+        const head = document.createElement('div');
+        head.className = 'wx-poll-head';
+
+        const badge = document.createElement('span');
+        badge.className = 'wx-poll-badge';
+        badge.textContent = 'Encuesta';
+
+        const state = document.createElement('span');
+        state.className = 'wx-poll-state ' + (isEnded ? 'wx-poll-state--closed' : 'wx-poll-state--open');
+        state.textContent = isEnded ? 'cerrada' : 'activa';
+        head.append(badge, state);
+        wrap.appendChild(head);
+
+        const q = document.createElement('div');
+        q.className = 'wx-poll-question';
+        q.textContent = poll.question;
+        wrap.appendChild(q);
 
         (poll.options || []).forEach((opt) => {
           const btn = document.createElement('button');
@@ -6818,13 +6878,14 @@ function getMaxChars() {
           wrap.appendChild(btn);
         });
 
-        // Meta row
         const meta = document.createElement('div');
         meta.className = 'wx-poll-meta';
+
         const totalSpan = document.createElement('span');
         totalSpan.className = 'wx-poll-total';
         totalSpan.textContent = total + ' voto' + (total !== 1 ? 's' : '');
         meta.appendChild(totalSpan);
+
         if (poll.ends_at) {
           const endSpan = document.createElement('span');
           const endDate = new Date(poll.ends_at);
@@ -6836,6 +6897,7 @@ function getMaxChars() {
           }
           meta.appendChild(endSpan);
         }
+
         wrap.appendChild(meta);
         return wrap;
       }
@@ -8624,6 +8686,29 @@ function getMaxChars() {
         }
       }
 
+      function ensureOwnProfileVisibility() {
+        if (!$userCard || !currentUser) return;
+        $userCard.hidden = false;
+        $userCard.style.display = '';
+        $userCard.classList.remove('wx-profile--readonly');
+
+        const selfVisibleSelectors = [
+          '.wx-profile-upload',
+          '.wx-profile-identity',
+          '.wx-account-switcher',
+          '#wx-connect-op-btn',
+          '#wx-open-verify-plans-btn',
+          '#wx-logout',
+          '#wx-proc-new'
+        ];
+        selfVisibleSelectors.forEach((selector) => {
+          const node = document.querySelector(selector);
+          if (!node) return;
+          node.hidden = false;
+          node.style.removeProperty('display');
+        });
+      }
+
       function isViewingOwnProfile() {
         if (!currentUser || !currentProfileView) return false;
         return String(currentProfileView.username || '').toLowerCase() === String(currentUser.username || '').toLowerCase();
@@ -8869,9 +8954,16 @@ function getMaxChars() {
         }
 
         // Botones extra: eliminar y reportar
+        let editBtn = null;
         let deleteBtn = null;
         let reportBtn = null;
         if (isOwn) {
+          editBtn = document.createElement('button');
+          editBtn.className = 'wx-post-btn';
+          editBtn.dataset.action = 'edit';
+          editBtn.dataset.id = post.id;
+          editBtn.dataset.content = post.content || '';
+          editBtn.textContent = 'Editar';
           deleteBtn = document.createElement('button');
           deleteBtn.className = 'wx-post-btn';
           deleteBtn.dataset.action = 'delete';
@@ -8893,6 +8985,7 @@ function getMaxChars() {
 
         actions.append(likeBtn, replyBtn, promoteBtn);
         if (tipBtn) actions.append(tipBtn);
+        if (editBtn) actions.append(editBtn);
         if (deleteBtn) actions.append(deleteBtn);
         if (reportBtn) actions.append(reportBtn);
 
@@ -8921,7 +9014,9 @@ function getMaxChars() {
         if (!posts || posts.length === 0) {
           const li = document.createElement('li');
           li.className = 'wx-empty';
-          li.textContent = 'No hay posts aún. ¡Sé el primero en publicar!';
+          li.textContent = (currentTab === 'profile' && currentUser)
+            ? 'Todav?a no ten?s posts en tu perfil.'
+            : 'No hay posts a?n. ?S? el primero en publicar!';
           $feed.appendChild(li);
           return;
         }
@@ -9733,6 +9828,7 @@ function getMaxChars() {
             $userCard.hidden = false;
             $userCard.style.display = '';
             applyProfileView(currentUser, { readonly: false });
+            ensureOwnProfileVisibility();
             if ($profileEmpty) {
               $profileEmpty.hidden = true;
               $profileEmpty.style.display = 'none';
@@ -11025,6 +11121,47 @@ function getMaxChars() {
         }
       }
 
+      async function editPost(postId, currentContent) {
+        if (!Number.isFinite(postId)) return;
+        if (!currentUser || !currentToken) {
+          setStatus('Inicia sesiÃ³n para editar posts.', 'error');
+          openAuthModal('login');
+          return;
+        }
+        const edited = await openInputDialog({
+          title: 'Editar post',
+          message: 'Modifica el contenido del post:',
+          multiline: true,
+          defaultValue: String(currentContent || ''),
+          confirmLabel: 'Guardar cambios'
+        });
+        if (edited === null) return;
+        const content = String(edited || '').trim();
+        try {
+          const res = await fetch(`${API_BASE}/${postId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            body: JSON.stringify({ content })
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            setStatus(body.error || 'No se pudo editar el post.', 'error');
+            return;
+          }
+          setStatus('Post actualizado.', 'info');
+          if (currentThreadPostId) {
+            openThread(currentThreadPostId).catch(() => {});
+          } else if (currentTab === 'profile') {
+            fetchMyPosts().catch(() => {});
+          } else {
+            fetchExplore().catch(() => {});
+          }
+        } catch (e) {
+          console.error(e);
+          setStatus('Error al editar el post.', 'error');
+        }
+      }
+
       $feed.addEventListener('click', async (ev) => {
         const profileBtn = ev.target.closest('[data-action="open-profile"]');
         if (profileBtn) {
@@ -11123,6 +11260,10 @@ function getMaxChars() {
         } else if (action === 'tip') {
           const uname = btn.dataset.username || 'usuario';
           donateToPost(parseInt(id, 10), uname);
+        } else if (action === 'edit') {
+          const postId = parseInt(id, 10);
+          if (!Number.isFinite(postId)) return;
+          editPost(postId, btn.dataset.content || '');
         } else if (action === 'delete') {
           const postId = parseInt(id, 10);
           if (!Number.isFinite(postId)) return;
@@ -11289,6 +11430,10 @@ function getMaxChars() {
           $text.focus();
           setStatus(`Respondiendo a @${uname}`, 'info');
           await openThread(parseInt(id, 10));
+        } else if (action === 'edit') {
+          const postId = parseInt(id, 10);
+          if (!Number.isFinite(postId)) return;
+          editPost(postId, btn.dataset.content || '');
         } else if (action === 'delete') {
           const postId = parseInt(id, 10);
           if (!Number.isFinite(postId)) return;
@@ -11496,10 +11641,17 @@ function getMaxChars() {
 
           // No permitir like a uno mismo también en el hilo
           const isOwnNode = currentUser && String(node.user_id) === String(currentUser.id);
+          let editBtn = null;
           let deleteBtn = null;
           if (isOwnNode) {
             likeBtn.disabled = true;
             likeBtn.title = 'No puedes dar like a tus propios posts';
+            editBtn = document.createElement('button');
+            editBtn.className = 'wx-post-btn';
+            editBtn.dataset.action = 'edit';
+            editBtn.dataset.id = node.id;
+            editBtn.dataset.content = node.content || '';
+            editBtn.textContent = 'Editar';
             deleteBtn = document.createElement('button');
             deleteBtn.className = 'wx-post-btn';
             deleteBtn.dataset.action = 'delete';
@@ -11508,6 +11660,7 @@ function getMaxChars() {
           }
 
           actions.append(likeBtn, replyBtn);
+          if (editBtn) actions.append(editBtn);
           if (deleteBtn) actions.append(deleteBtn);
 
           // "Ver N respuestas" button for nodes that have child replies
