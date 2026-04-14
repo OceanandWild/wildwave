@@ -1490,6 +1490,7 @@
     const API_BASE = "https://owsdatabase.onrender.com";
     const STORE_PROJECT_SLUG = "wildwave";
     const SUPPORT_GATE_BYPASS_KEY = "wildwave_support_gate_bypass";
+    const STORE_MIN_ENFORCED_BLOCK_VERSION = "2026.4.14-t0656";
     const STORAGE_TOKEN = "wildwave_token";
     const STORAGE_USER = "wildwave_user";
 
@@ -1648,8 +1649,60 @@
       return payload;
     }
 
+    function parseProjectMetadata(project) {
+      const meta = project?.metadata;
+      if (!meta) return {};
+      if (typeof meta === "string") {
+        try {
+          const parsed = JSON.parse(meta);
+          return parsed && typeof parsed === "object" ? parsed : {};
+        } catch (_) {
+          return {};
+        }
+      }
+      return typeof meta === "object" ? meta : {};
+    }
+
+    function parseReleaseVersionParts(version) {
+      const raw = safeText(version);
+      const match = raw.match(/^(\d{4})\.(\d{1,2})\.(\d{1,2})-t(\d{4})$/);
+      if (!match) return null;
+      return {
+        year: Number(match[1]),
+        month: Number(match[2]),
+        day: Number(match[3]),
+        time: Number(match[4]),
+      };
+    }
+
+    function compareReleaseVersion(a, b) {
+      const pa = parseReleaseVersionParts(a);
+      const pb = parseReleaseVersionParts(b);
+      if (!pa || !pb) {
+        return safeText(a).localeCompare(safeText(b), undefined, { numeric: true, sensitivity: "base" });
+      }
+      if (pa.year !== pb.year) return pa.year - pb.year;
+      if (pa.month !== pb.month) return pa.month - pb.month;
+      if (pa.day !== pb.day) return pa.day - pb.day;
+      return pa.time - pb.time;
+    }
+
     function getStoreRestrictionState(project) {
       if (!project || typeof project !== "object") return "";
+      const metadata = parseProjectMetadata(project);
+      const forceBlockRaw = String(
+        metadata?.force_block
+        ?? metadata?.forceBlock
+        ?? ""
+      ).trim().toLowerCase();
+      const forceBlock = forceBlockRaw === "true" || forceBlockRaw === "1";
+      if (forceBlock) {
+        const forcedState = safeText(metadata?.force_block_state || metadata?.forceBlockState).toLowerCase();
+        const isForcedRework = forcedState === "rework"
+          || forcedState === "pleno_rework"
+          || forcedState === "full_rework";
+        return isForcedRework ? "rework" : "unavailable";
+      }
       const status = safeText(project.status).toLowerCase().trim();
       const rawState = safeText(project.phase_state || project.dev_state || project.build_state || project.project_state).toLowerCase().trim();
       const reason = safeText(project.unavailable_reason || project.status_reason || project.block_reason || project.maintenance_reason).toLowerCase().trim();
@@ -1676,8 +1729,20 @@
     }
 
     function getStoreRestrictionReason(project, state) {
+      const metadata = parseProjectMetadata(project);
       const raw = safeText(
-        project?.unavailable_reason
+        metadata?.force_block_reason
+        || metadata?.forceBlockReason
+        || metadata?.force_reason
+        || metadata?.forceReason
+        || metadata?.block_reason
+        || metadata?.blockReason
+        || metadata?.reason
+        || metadata?.status_reason
+        || metadata?.unavailable_reason
+        || metadata?.maintenance_reason
+        || metadata?.release_warning
+        || project?.unavailable_reason
         || project?.status_reason
         || project?.block_reason
         || project?.maintenance_reason
@@ -1729,6 +1794,16 @@
         if (window.wildwaveUpdater?.runtime) {
           const runtime = await window.wildwaveUpdater.runtime();
           if (runtime && runtime.packaged === false) return true;
+          const packaged = runtime && typeof runtime.packaged === "boolean" ? runtime.packaged : null;
+          const runtimeVersion = safeText(
+            runtime?.version
+            || runtime?.appVersion
+            || runtime?.versionName
+            || runtime?.currentVersion
+          );
+          if (packaged === true && runtimeVersion && compareReleaseVersion(runtimeVersion, STORE_MIN_ENFORCED_BLOCK_VERSION) < 0) {
+            return true;
+          }
         }
       } catch (_) {}
       try {
