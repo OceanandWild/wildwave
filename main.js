@@ -122,6 +122,10 @@ ipcMain.handle('wildwave-updater:install', async () => {
   return { ok: true };
 });
 ipcMain.handle('wildwave-updater:version', () => app.getVersion());
+ipcMain.handle('wildwave-updater:runtime', () => ({
+  packaged: isPackaged,
+  version: app.getVersion()
+}));
 ipcMain.handle('wildwave-updater:open-external', async (_event, rawUrl) => {
   const url = String(rawUrl || '').trim();
   if (!url) return { ok: false, reason: 'empty-url' };

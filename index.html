@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
@@ -516,7 +516,7 @@
     .main-top { border-bottom: 1px solid var(--line); padding: 12px 14px; }
     .main-title { margin: 0; font-size: 17px; font-weight: 800; }
     .main-content { min-height: 0; padding: 12px; }
-    #channel-chat-view, #channel-center-view { height: 100%; min-height: 0; }
+    #channel-chat-view { height: 100%; min-height: 0; }
     .chat-panel {
       height: 100%;
       border: 1px solid rgba(157, 191, 230, 0.18);
@@ -1197,7 +1197,7 @@
         </div>
         <h2 class="project-support-title">OWS Store ya no soporta este proyecto</h2>
         <p id="project-support-text" class="project-support-text">
-          Esta version quedo fuera de soporte. Se bloquea el acceso desde la aplicacion hasta que OWS Store vuelva a habilitarla.
+          Esta build quedo fuera de soporte. Se bloquea el acceso desde la aplicacion hasta que OWS Store vuelva a habilitarla.
         </p>
         <div id="project-support-note" class="project-support-note">
           Motivo: proceso de rework, error critico o descontinuacion temporal del proyecto.
@@ -1489,6 +1489,7 @@
   <script>
     const API_BASE = "https://owsdatabase.onrender.com";
     const STORE_PROJECT_SLUG = "wildwave";
+    const SUPPORT_GATE_BYPASS_KEY = "wildwave_support_gate_bypass";
     const STORAGE_TOKEN = "wildwave_token";
     const STORAGE_USER = "wildwave_user";
 
@@ -1704,7 +1705,7 @@
       if (nameEl) nameEl.textContent = name;
       if (stateEl) stateEl.textContent = state === "rework" ? "Pleno Rework" : "Indisponible";
       if (textEl) {
-        textEl.textContent = `${name} ya no tiene soporte en OWS Store. Esta version no puede continuar hasta que el estado vuelva a disponible.`;
+        textEl.textContent = `${name} ya no tiene soporte en OWS Store para esta build. El acceso queda bloqueado hasta que el estado vuelva a disponible.`;
       }
       if (noteEl) {
         noteEl.textContent = state === "rework"
@@ -1716,8 +1717,31 @@
       showToast(`${name} bloqueado por OWS Store (${state === "rework" ? "Pleno Rework" : "Indisponible"}).`, "error");
     }
 
+    async function shouldBypassStoreSupportGate() {
+      try {
+        const search = new URLSearchParams(window.location.search || "");
+        if (search.get("owsBypass") === "1") return true;
+      } catch (_) {}
+      try {
+        if (safeText(localStorage.getItem(SUPPORT_GATE_BYPASS_KEY)) === "1") return true;
+      } catch (_) {}
+      try {
+        if (window.wildwaveUpdater?.runtime) {
+          const runtime = await window.wildwaveUpdater.runtime();
+          if (runtime && runtime.packaged === false) return true;
+        }
+      } catch (_) {}
+      try {
+        const host = safeText(window.location.hostname).toLowerCase();
+        if (host === "localhost" || host === "127.0.0.1") return true;
+      } catch (_) {}
+      return false;
+    }
+
     async function enforceStoreSupportGate() {
       try {
+        const bypass = await shouldBypassStoreSupportGate();
+        if (bypass) return false;
         const list = await api("/ows-store/projects");
         const projects = Array.isArray(list) ? list : [];
         const project = projects.find((item) => safeText(item?.slug).toLowerCase() === STORE_PROJECT_SLUG);
@@ -1770,6 +1794,8 @@
       channelChatView.classList.remove("hidden");
       updateMainTitle();
     }
+      fetchMessagesForCurrentChannel().catch(() => null);
+      fetchMessagesForCurrentChannel().catch(() => null);
 
     function updateMainTitle() {
       const selected = getSelectedServer();
@@ -1862,7 +1888,9 @@
       applySquareIcon(leftTopServerIcon, safeText(selected?.icon_url, ""), safeText(selected?.name, "Servidor"));
       const tree = getServerTree(selected);
       const allText = tree.flatMap((cat) => cat.items || []);
-      if (!selectedTextChannelId && allText.length) selectedTextChannelId = Number(allText[0].id || 0) || null;
+      if (selectedTextChannelId && !allText.some((item) => Number(item.id) === Number(selectedTextChannelId))) {
+        selectedTextChannelId = null;
+      }
       if (!tree.length) {
         serverChannelsView.innerHTML = "<div class='member-sub'>No hay categorias aun. Usa + Categoria.</div>";
         return;
@@ -1904,49 +1932,20 @@
             <div class="member-avatar">${initials}</div>
             <div>
               <div class="member-name">${name}</div>
-              <div class="member-sub">@${user} · ${joined}</div>
+              <div class="member-sub">@${user} Â· ${joined}</div>
             </div>
           </li>
         `;
       }).join("");
     }
-
-    function renderDiscoverList() {
-      if (!allChannels.length) {
-        discoverList.innerHTML = "<div class='member-sub'>No hay servidores disponibles.</div>";
-        return;
-      }
-      discoverList.innerHTML = allChannels.map((c) => `
-        <div class="discover-item">
-          <div>
-            <div class="discover-name">${safeText(c.name, "Servidor")}</div>
-            <div class="discover-meta">${safeText(c.description || c.topic, "Sin descripcion")} · ${Number(c.members_count || 0)} miembro(s)</div>
-          </div>
-          <button class="btn" type="button" data-open-discover="${c.id}">Abrir</button>
-        </div>
-      `).join("");
-      discoverList.querySelectorAll("[data-open-discover]").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          selectedServerId = Number(btn.getAttribute("data-open-discover") || 0) || null;
-          selectedTextChannelId = null;
-          renderMembershipState();
-          await fetchServerMembers(selectedServerId).catch(() => null);
-          showToast("Servidor seleccionado.", "ok");
-        });
-      });
-    }
-
     function renderMembershipState() {
       const hasChannels = ownChannels.length > 0;
-      emptyState.classList.toggle("hidden", hasChannels);
-      hasChannelState.classList.toggle("hidden", !hasChannels);
-      createChannelBtnEmpty.classList.toggle("hidden", hasChannels);
       serverAddCategoryBtn.classList.toggle("hidden", !hasChannels);
       renderServerRail();
       renderOwnChannels();
-      renderDiscoverList();
       renderMembers();
       updateMainTitle();
+      fetchMessagesForCurrentChannel().catch(() => null);
     }
 
     function renderInviteSearchResults() {
@@ -2120,7 +2119,18 @@
     async function fetchMessagesForCurrentChannel() {
       channelMessages.innerHTML = "";
       if (!selectedServerId || !selectedTextChannelId) {
-        channelMessages.innerHTML = "<div class='member-sub'>Selecciona un canal para ver mensajes.</div>";
+        channelMessages.innerHTML = `
+          <div class="chat-placeholder">
+            <div>
+              <div class="chat-placeholder-icon">💬</div>
+              <h3>Selecciona un canal</h3>
+              <p>El chat del servidor se cargara aqui cuando elijas un canal desde la lista lateral.</p>
+            </div>
+          </div>
+        `;
+        channelMessageInput.disabled = true;
+        channelSendBtn.disabled = true;
+        channelMessageInput.value = "";
         return;
       }
       try {
@@ -2130,13 +2140,15 @@
           headers: { Authorization: `Bearer ${token}` }
         });
         const messages = Array.isArray(payload?.messages) ? payload.messages : [];
+        channelMessageInput.disabled = false;
+        channelSendBtn.disabled = false;
         if (!messages.length) {
           channelMessages.innerHTML = "<div class='member-sub'>Sin mensajes aun. Inicia la conversacion.</div>";
           return;
         }
         channelMessages.innerHTML = messages.map((m) => `
           <div class="chat-item">
-            <div class="chat-item-meta">${safeText(m.sender_display_name || m.sender_username, "Sistema")} · ${m.created_at ? new Date(m.created_at).toLocaleString() : "-"}</div>
+            <div class="chat-item-meta">${safeText(m.sender_display_name || m.sender_username, "Sistema")} Â· ${m.created_at ? new Date(m.created_at).toLocaleString() : "-"}</div>
             <div class="chat-item-text">${safeText(m.content)}</div>
           </div>
         `).join("");
@@ -2179,7 +2191,7 @@
       hydrateProfileDock();
       await fetchChannels();
       await fetchServerMembers(selectedServerId).catch(() => null);
-      setMainView("center");
+      setMainView("chat");
     }
 
     async function handleAuthSubmit(ev) {
@@ -2280,10 +2292,8 @@
     modeLoginBtn.addEventListener("click", () => applyAuthMode("login"));
     modeRegisterBtn.addEventListener("click", () => applyAuthMode("register"));
     authForm.addEventListener("submit", handleAuthSubmit);
-    serverRailCenter.addEventListener("click", () => setMainView("center"));
     leftTopServerTrigger.addEventListener("click", () => openServerActionModal());
     createPlusBtn.addEventListener("click", () => openCreateChannelModal());
-    createChannelBtnEmpty.addEventListener("click", () => openCreateChannelModal());
     createChannelCancel.addEventListener("click", closeCreateChannelModal);
     createChannelPrev.addEventListener("click", () => setCreateServerStep(createServerStep - 1));
     createChannelNext.addEventListener("click", () => setCreateServerStep(createServerStep + 1));
@@ -2315,7 +2325,7 @@
     });
     serverActionInvite.addEventListener("click", () => {
       closeServerActionModal();
-      setMainView("center");
+      setMainView("chat");
       openCreateChannelModal(3);
     });
     serverActionSettings.addEventListener("click", openServerSettingsModal);
@@ -2377,10 +2387,6 @@
       } catch (err) {
         showToast(err.message || "No se pudieron guardar los ajustes.", "error");
       }
-    });
-    dmShortcutBtn.addEventListener("click", () => {
-      setMainView("center");
-      dmThreadView.innerHTML = "<strong>Bandeja DM</strong><div style='margin-top:6px;color:var(--ink-soft);font-size:12px;'>Seleccion directa de conversaciones en progreso.</div>";
     });
     if (channelSendBtn) channelSendBtn.addEventListener("click", () => sendChannelMessage());
     if (channelMessageInput) {
@@ -2492,8 +2498,6 @@
       document.addEventListener("click", () => profileFlyout.classList.remove("open"));
     }
     document.getElementById("profile-logout-btn").addEventListener("click", logout);
-    document.getElementById("explore-btn").addEventListener("click", () => setMainView("center"));
-
     applyAuthMode("login");
     renderMembershipState();
     (async () => {
@@ -2505,3 +2509,5 @@
   </script>
 </body>
 </html>
+
+
